@@ -1,0 +1,693 @@
+<!doctype html>
+<!-- Purpose: the LabCrew Lite app page. It only displays what the API returns and sends the human decision
+     back; it computes nothing. Same visual language as the main LabCrew app (Inter, indigo accent, dark sidebar). -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LabCrew Lite</title>
+<link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300..800&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.6/dist/purify.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/plotly.js-dist-min@2.35.2/plotly.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.min.js"></script>
+<style>
+:root { --bg:#f4f5f8; --surface:#fff; --line:#e6e8ee; --line2:#eef0f4; --ink:#111827; --ink2:#4b5563; --muted:#8b93a3;
+        --accent:#4f46e5; --accent-soft:#eef0ff; --side:#0e1322; --side2:#161d31; --side-line:#232c44;
+        --good:#16a34a; --good-soft:#dcfce7; --warn:#d97706; --warn-soft:#fef3c7; --bad:#dc2626; --bad-soft:#fee2e2;
+        --llm:#4f46e5; --code:#334155; --code-soft:#f1f5f9; --r:#2563eb; --r-soft:#dbeafe; --human:#15803d;
+        --shadow:0 1px 2px rgba(16,24,40,.04),0 1px 3px rgba(16,24,40,.06); --radius:.7rem; }
+* { box-sizing: border-box; }
+[hidden] { display:none !important; }   /* author display rules (e.g. .gate .gf flex) must not un-hide elements */
+html, body { margin:0; height:100%; }
+body { background:var(--bg); color:var(--ink); font:14px/1.5 Inter, system-ui, -apple-system, "Segoe UI", sans-serif;
+       -webkit-font-smoothing:antialiased; }
+code, .mono { font-family:"JetBrains Mono", ui-monospace, monospace; font-size:.82em; }
+button { font:inherit; cursor:pointer; }
+.app { display:grid; grid-template-columns:310px minmax(0,1fr); min-height:100vh; }
+@media (max-width:900px) { .app { grid-template-columns:1fr; } }
+
+/* ------------------------------------------------------------- sidebar */
+.side { background:var(--side); color:#c9cfdc; padding:1.1rem; display:flex; flex-direction:column; gap:.2rem; }
+.brand { display:flex; align-items:center; gap:.7rem; padding-bottom:1.1rem; margin-bottom:.6rem; border-bottom:1px solid var(--side-line);
+         text-decoration:none; color:inherit; cursor:pointer; }
+.brand:hover .brand-name { color:#c7d2fe; }
+.brand:focus-visible { outline:2px solid #818cf8; outline-offset:3px; border-radius:.5rem; }
+.brand-logo { width:2.25rem; height:2.25rem; border-radius:.7rem; display:grid; place-items:center; color:#fff;
+              background:linear-gradient(135deg,#6366f1 0%,#4338ca 55%,#312e81 100%); box-shadow:0 4px 14px rgba(79,70,229,.45); }
+.brand-name { font-weight:800; font-size:1.05rem; color:#fff; letter-spacing:-.01em; line-height:1.1; }
+.brand-sub { font-size:.72rem; color:#7d869b; }
+.side-label { font-size:.68rem; font-weight:700; text-transform:uppercase; letter-spacing:.08em; color:#6f7890; margin:.7rem 0 .4rem; }
+.side textarea, .side input { width:100%; background:var(--side2); border:1px solid var(--side-line); color:#eef1f7; border-radius:.7rem;
+             font:inherit; padding:.6rem .75rem; resize:none; }
+.side textarea:focus, .side input:focus { outline:none; border-color:#6366f1; box-shadow:0 0 0 3px rgba(99,102,241,.28); }
+.side label { color:#aab2c3; font-size:.78rem; font-weight:600; display:block; margin:.5rem 0 .25rem; }
+.chip { font-size:.72rem; padding:.28rem .62rem; border-radius:999px; background:rgba(255,255,255,.04); border:1px solid var(--side-line);
+        color:#b8c0d4; text-align:left; transition:all .15s; }
+.chip:hover { background:rgba(99,102,241,.16); border-color:#4f46e5; color:#fff; }
+.btn-run { width:100%; padding:.62rem 1rem; font-weight:700; border-radius:.7rem; border:0; color:#fff;
+           background:linear-gradient(180deg,#5b52f0,#4338ca); box-shadow:0 6px 18px rgba(79,70,229,.35), inset 0 1px 0 rgba(255,255,255,.18); }
+.btn-run:hover { background:linear-gradient(180deg,#6860f5,#4a3fd6); } .btn-run:disabled { opacity:.55; cursor:default; }
+.kbd-hint { font-size:.68rem; color:#5f6880; text-align:center; margin-top:.4rem; }
+details.settings { margin-top:.9rem; border-top:1px solid var(--side-line); padding-top:.7rem; }
+details.settings summary { cursor:pointer; color:#aab2c3; font-weight:600; font-size:.82rem; list-style:none; }
+.side-link { margin-top:.8rem; align-self:flex-start; }
+.side-foot { margin-top:auto; padding-top:1rem; border-top:1px solid var(--side-line); font-size:.74rem; color:#7d869b; }
+.health { display:flex; align-items:center; gap:.45rem; margin-bottom:.45rem; color:#aab2c3; }
+.dot { width:.5rem; height:.5rem; border-radius:50%; background:#6f7890; } .dot.on { background:#22c55e; box-shadow:0 0 0 3px rgba(34,197,94,.18); }
+
+/* ------------------------------------------------------------- main */
+.main { padding:1rem 1.25rem; display:flex; flex-direction:column; gap:.85rem; min-width:0; }
+.topbar { display:flex; align-items:center; gap:.8rem; flex-wrap:wrap; }
+.topbar h1 { font-size:1.05rem; margin:0; font-weight:700; letter-spacing:-.01em; }
+.topbar .q { color:var(--ink2); font-size:.86rem; max-width:60ch; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.pill { display:inline-flex; align-items:center; gap:.35rem; padding:.18rem .6rem; border-radius:999px; font-size:.74rem; font-weight:600;
+        border:1px solid var(--line); background:var(--surface); color:var(--ink2); }
+.pill.sim { background:var(--warn-soft); color:#92400e; border-color:#fde68a; margin-left:auto; }
+.pill.running { background:var(--accent-soft); color:var(--accent); border-color:#c7cbff; }
+.pill.awaiting_approval { background:var(--warn-soft); color:#92400e; border-color:#fde68a; }
+.pill.finished { background:var(--good-soft); color:#166534; border-color:#bbf7d0; }
+.pill.needs_review, .pill.error { background:var(--bad-soft); color:#991b1b; border-color:#fecaca; }
+
+.stepper { display:flex; gap:.4rem; background:var(--surface); border:1px solid var(--line); border-radius:var(--radius);
+           padding:.55rem .7rem; box-shadow:var(--shadow); overflow-x:auto; }
+.step { flex:1 0 auto; display:flex; align-items:center; gap:.45rem; font-size:.76rem; color:var(--muted); white-space:nowrap; }
+.step .n { width:1.35rem; height:1.35rem; border-radius:50%; display:grid; place-items:center; font-size:.7rem; font-weight:700;
+           border:1.5px solid var(--line); background:var(--surface); }
+.step .who { font-size:.62rem; text-transform:uppercase; letter-spacing:.06em; display:block; color:var(--muted); }
+.step.done { color:var(--ink2); } .step.done .n { background:var(--good); border-color:var(--good); color:#fff; }
+.step.active { color:var(--ink); font-weight:600; } .step.active .n { border-color:var(--accent); color:var(--accent); animation:pulse 1.4s infinite; }
+.step.wait .n { border-color:var(--warn); color:var(--warn); }
+.step.bad .n { background:var(--bad); border-color:var(--bad); color:#fff; }
+.step + .step::before { content:""; width:1rem; height:1px; background:var(--line); margin-right:.2rem; }
+@keyframes pulse { 0%,100% { box-shadow:0 0 0 0 rgba(79,70,229,.35); } 50% { box-shadow:0 0 0 5px rgba(79,70,229,0); } }
+
+.tiles { display:grid; grid-template-columns:repeat(6, minmax(0,1fr)); gap:.6rem; }
+@media (max-width:1200px) { .tiles { grid-template-columns:repeat(3, minmax(0,1fr)); } }
+.tile { background:var(--surface); border:1px solid var(--line); border-radius:var(--radius); padding:.65rem .8rem; box-shadow:var(--shadow); }
+.tile .k { font-size:.68rem; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); font-weight:700; }
+.tile .v { font-size:1.25rem; font-weight:800; letter-spacing:-.02em; margin-top:.1rem; }
+.tile .s { font-size:.72rem; color:var(--muted); }
+.tile.good .v { color:var(--good); } .tile.bad .v { color:var(--bad); } .tile.warn .v { color:var(--warn); }
+
+.grid { display:grid; grid-template-columns:minmax(0,7fr) minmax(0,4fr); gap:1rem; align-items:start; }
+.grid.wide { grid-template-columns:minmax(0,1fr); } .grid.wide .gate { display:none; }
+@media (max-width:1100px) { .grid { grid-template-columns:minmax(0,1fr); } }
+.card { background:var(--surface); border:1px solid var(--line); border-radius:var(--radius); box-shadow:var(--shadow); min-width:0; }
+.tabs { display:flex; gap:.2rem; border-bottom:1px solid var(--line); padding:0 .6rem; overflow-x:auto; }
+.tab { border:0; background:none; padding:.75rem .7rem; color:var(--ink2); font-weight:600; font-size:.84rem; border-bottom:2px solid transparent;
+       white-space:nowrap; } .tab:hover { color:var(--ink); }
+.tab.on { color:var(--accent); border-bottom-color:var(--accent); }
+.pane { padding:1rem 1.1rem; display:none; overflow-x:auto; }   /* wide tables scroll inside the card on phones */ .pane.on { display:block; }
+.section-h { font-size:.72rem; font-weight:700; text-transform:uppercase; letter-spacing:.07em; color:var(--muted); margin:1.1rem 0 .5rem; }
+.section-h:first-child { margin-top:0; }
+table.t { width:100%; border-collapse:collapse; font-size:.82rem; }
+table.t th { text-align:left; font-size:.7rem; text-transform:uppercase; letter-spacing:.05em; color:var(--muted); font-weight:700;
+             border-bottom:1px solid var(--line); padding:.4rem .5rem; }
+table.t td { border-bottom:1px solid var(--line2); padding:.42rem .5rem; vertical-align:top; }
+.badge { display:inline-block; padding:.05rem .45rem; border-radius:999px; font-size:.7rem; font-weight:700; }
+.b-good { background:var(--good-soft); color:#166534; } .b-bad { background:var(--bad-soft); color:#991b1b; }
+.b-warn { background:var(--warn-soft); color:#92400e; } .b-acc { background:var(--accent-soft); color:var(--accent); }
+.b-mute { background:var(--code-soft); color:var(--code); } .b-r { background:var(--r-soft); color:#1e40af; }
+.summary { font-size:.95rem; line-height:1.65; background:var(--accent-soft); border:1px solid #dfe2ff; border-radius:var(--radius); padding:.9rem 1rem; }
+.summary .cite { color:var(--accent); font-weight:600; font-size:.82em; }
+.summary .toolref { color:var(--code); background:var(--code-soft); border-radius:.3rem; padding:0 .25rem; font-size:.8em; }
+.who-line { font-size:.74rem; color:var(--muted); margin-top:.4rem; }
+.empty { text-align:center; padding:3rem 1rem; color:var(--muted); }
+.empty .t1 { font-weight:700; color:var(--ink2); font-size:1rem; margin-bottom:.3rem; }
+.skel { height:.8rem; border-radius:.4rem; background:linear-gradient(90deg,#eef0f4,#f7f8fa,#eef0f4); background-size:200% 100%;
+        animation:sk 1.3s infinite; margin:.55rem 0; } @keyframes sk { to { background-position:-200% 0; } }
+.passage { border:1px solid var(--line); border-radius:.55rem; padding:.6rem .75rem; margin-bottom:.5rem; }
+.passage .c { font-weight:700; color:var(--accent); font-size:.8rem; } .passage .x { color:var(--ink2); font-size:.84rem; margin-top:.2rem; }
+.alert { border-radius:.55rem; padding:.6rem .75rem; margin-bottom:.5rem; font-size:.84rem; }
+.alert.warn { background:var(--warn-soft); color:#78350f; } .alert.bad { background:var(--bad-soft); color:#7f1d1d; }
+.alert.good { background:var(--good-soft); color:#14532d; } .alert.info { background:var(--accent-soft); color:#312e81; }
+.report { font-size:.88rem; } .report h1 { font-size:1.1rem; } .report h2 { font-size:.95rem; margin-top:1.2rem; }
+.report table { border-collapse:collapse; } .report td, .report th { border-bottom:1px solid var(--line); padding:.3rem .6rem; text-align:left; }
+.report blockquote { margin:0; padding-left:.8rem; border-left:3px solid var(--line); color:var(--ink2); }
+.seg { display:inline-flex; border:1px solid var(--line); border-radius:.55rem; overflow:hidden; margin-bottom:.8rem; }
+.seg button { border:0; background:var(--surface); padding:.3rem .8rem; font-size:.8rem; color:var(--ink2); }
+.seg button.on { background:var(--accent); color:#fff; }
+.plot { height:300px; }
+
+/* ------------------------------------------------------------- decision gate */
+.gate .gh { display:flex; align-items:center; gap:.65rem; padding:.85rem 1rem; border-bottom:1px solid var(--line); }
+.gh-ico { width:2rem; height:2rem; border-radius:.6rem; display:grid; place-items:center; background:var(--good-soft); color:var(--human); font-weight:800; }
+.gh-title { font-weight:700; } .gh-sub { font-size:.74rem; color:var(--muted); }
+.gate .gb { padding:1rem; } .gate .gf { padding:.85rem 1rem; border-top:1px solid var(--line); display:flex; gap:.5rem; }
+.vrow { display:flex; align-items:center; gap:.6rem; padding:.5rem .6rem; border:1px solid var(--line); border-radius:.55rem; margin-bottom:.4rem; }
+.vrow:hover { border-color:#c7cbff; } .vrow input { width:1rem; height:1rem; accent-color:var(--accent); }
+.vrow .id { font-weight:700; font-family:"JetBrains Mono", monospace; font-size:.85rem; }
+.vrow .meta { margin-left:auto; font-size:.74rem; color:var(--muted); text-align:right; }
+.gate textarea { width:100%; border:1px solid var(--line); border-radius:.55rem; padding:.5rem .6rem; font:inherit; resize:vertical; margin-top:.4rem; }
+.btn { border-radius:.55rem; padding:.5rem .9rem; font-weight:700; border:1px solid transparent; flex:1; }
+.btn-ok { background:var(--good); color:#fff; } .btn-no { background:var(--surface); color:var(--bad); border-color:#fecaca; }
+.btn:disabled { opacity:.5; cursor:default; }
+
+/* ------------------------------------------------------------- architecture + tour */
+.arch-sec { margin-bottom:1.6rem; } .arch-sec h3 { font-size:1rem; margin:0 0 .25rem; } .arch-sec p { color:var(--ink2); margin:.2rem 0 .7rem; }
+.arch-sec h3 .k { display:inline-grid; place-items:center; width:1.5rem; height:1.5rem; border-radius:.45rem; background:var(--accent-soft);
+                  color:var(--accent); font-size:.75rem; margin-right:.45rem; }
+.mm { border:1px solid var(--line); border-radius:var(--radius); padding:.8rem; background:#fcfcfd; overflow-x:auto; text-align:center; }
+.mm pre.mermaid { margin:0; font-size:.75rem; color:var(--muted); text-align:left; } .mm svg { max-width:100%; height:auto; }
+.roles { display:grid; grid-template-columns:repeat(4, minmax(0,1fr)); gap:.6rem; }
+@media (max-width:1100px) { .roles { grid-template-columns:repeat(2, minmax(0,1fr)); } }
+.role { border:1px solid var(--line); border-radius:var(--radius); padding:.75rem; }
+.role .rt { font-weight:800; } .role ul { margin:.4rem 0 0; padding-left:1.1rem; color:var(--ink2); font-size:.82rem; }
+.role.r { border-top:3px solid var(--r); } .role.py { border-top:3px solid var(--code); } .role.llm { border-top:3px solid var(--llm); }
+.role.hu { border-top:3px solid var(--human); }
+.rules li { margin-bottom:.35rem; color:var(--ink2); } .rules b { color:var(--ink); }
+.tour-frame { width:100%; height:min(78vh, 760px); border:1px solid var(--line); border-radius:var(--radius); background:#e9ecf3; }
+.tour-bar { display:flex; align-items:center; gap:.6rem; margin-bottom:.6rem; }
+.tour-bar a { margin-left:auto; font-size:.8rem; color:var(--accent); }
+
+/* ------------------------------------------------------------- feedback + accessibility */
+.toasts { position:fixed; right:1rem; bottom:1rem; display:flex; flex-direction:column; gap:.5rem; z-index:50; max-width:min(420px, calc(100vw - 2rem)); }
+.toast { background:var(--surface); border:1px solid var(--line); border-left:4px solid var(--accent); border-radius:.6rem; padding:.65rem .8rem;
+         box-shadow:0 8px 24px rgba(16,24,40,.14); font-size:.84rem; display:flex; gap:.6rem; align-items:flex-start; animation:tin .18s ease-out; }
+.toast.bad { border-left-color:var(--bad); } .toast.good { border-left-color:var(--good); } .toast.warn { border-left-color:var(--warn); }
+.toast .x { margin-left:auto; border:0; background:none; color:var(--muted); font-size:1rem; line-height:1; padding:0 .1rem; }
+@keyframes tin { from { opacity:0; transform:translateY(6px); } }
+.pill.offline { background:var(--bad-soft); color:#991b1b; border-color:#fecaca; }
+#p-charts:not(.nodata) #charts-empty { display:none; } #p-charts.nodata > :not(#charts-empty) { display:none; }
+.llm-line { font-size:.7rem; color:#6f7890; margin:-.2rem 0 .5rem 0.95rem; }
+.tab:focus-visible, .btn:focus-visible, .btn-run:focus-visible, .chip:focus-visible, .seg button:focus-visible {
+  outline:2px solid #818cf8; outline-offset:2px; }
+.side .examples { width:100%; margin:0 0 .9rem; appearance:none; -webkit-appearance:none; cursor:pointer;
+  background:var(--side2) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%23aab2c3' stroke-width='1.5'/%3E%3C/svg%3E") no-repeat right .75rem center;
+  border:1px solid var(--side-line); color:#c9cfdc; border-radius:.7rem; font:inherit; font-size:.82rem;
+  padding:.55rem 2rem .55rem .75rem; text-overflow:ellipsis; white-space:nowrap; overflow:hidden; }
+.side .examples:hover { border-color:#4f46e5; }
+.side .examples:focus { outline:none; border-color:#6366f1; box-shadow:0 0 0 3px rgba(99,102,241,.28); }
+.side .examples option { background:#161d31; color:#eef1f7; }
+.btn-ok:not(:disabled):hover { filter:brightness(1.07); } .btn-no:not(:disabled):hover { background:var(--bad-soft); }
+@media (max-width:600px) {
+  .tiles { grid-template-columns:repeat(2, minmax(0,1fr)); }
+  .main { padding:.8rem; } .pill.sim { margin-left:0; } .topbar .q { white-space:normal; }
+  .roles { grid-template-columns:1fr; }
+}
+@media (prefers-reduced-motion:reduce) { *, *::before, *::after { animation:none !important; transition:none !important; } }
+</style>
+</head>
+<body>
+<div class="app">
+  <!-- ============================================================ sidebar -->
+  <aside class="side">
+    <a class="brand" href="/" title="Back to the start page">
+      <div class="brand-logo"><svg width="18" height="18" viewBox="0 0 16 16" fill="currentColor"><path d="M2 2h3v3H2zM11 11h3v3h-3zM3.5 5v2.5a4 4 0 0 0 4 4H11v-1H7.5a3 3 0 0 1-3-3V5z"/></svg></div>
+      <div><div class="brand-name">LabCrew Lite</div><div class="brand-sub">GWAS copilot · CrewAI agents · R statistics</div></div>
+    </a>
+    <div class="side-label">Your question</div>
+    <textarea id="question" rows="4">Which variants are associated with the trait, and which should go to the functional assay?</textarea>
+    <div class="side-label">Or try an example</div>
+    <select id="examples" class="examples" aria-label="Example questions"><option value="">Loading examples…</option></select>
+    <button class="btn-run" id="run">&#9654;&nbsp; Run analysis</button>
+    <div class="kbd-hint">Ctrl + Enter to run</div>
+    <details class="settings">
+      <summary>&#9881;&nbsp; Settings</summary>
+      <label for="reviewer">Your name (audit log)</label><input id="reviewer" value="scientist">
+      <label for="seed">Simulation seed</label><input id="seed" type="number" value="2026" min="1">
+      <label for="rounds">Rounds</label><input id="rounds" type="number" value="2" min="1" max="3">
+    </details>
+    <button class="chip side-link" id="go-arch">&#9638;&nbsp; How LabCrew Lite works</button>
+    <div class="side-foot">
+      <div class="health"><span class="dot" id="hdot"></span><span id="htext">Checking API…</span></div>
+      <div class="llm-line" id="llmtext"></div>
+      Every number comes from the R engine and is checked against the tool log. Pass/fail comes from the versioned
+      rules file. The agents choose tools and write words. Nothing reaches the lab without your approval.
+    </div>
+  </aside>
+
+  <!-- ============================================================ main -->
+  <section class="main">
+    <div class="topbar">
+      <h1 id="title">GWAS study</h1><span class="q" id="qline">Ask a question to start an analysis.</span>
+      <span class="pill" id="status" hidden></span>
+      <span class="pill sim">SIMULATED / FICTIONAL data</span>
+    </div>
+    <div class="stepper" id="stepper"></div>
+    <div class="tiles" id="tiles"></div>
+
+    <div class="grid" id="grid">
+      <div class="card">
+        <div class="tabs" id="tabs">
+          <button class="tab on" data-p="summary">Summary</button><button class="tab" data-p="charts">Charts</button>
+          <button class="tab" data-p="evidence">Evidence</button><button class="tab" data-p="report">Full report</button>
+          <button class="tab" data-p="audit">Audit</button><button class="tab" data-p="tour">Guided tour</button>
+          <button class="tab" data-p="arch">Architecture</button>
+        </div>
+        <div class="pane on" id="p-summary"></div>
+        <div class="pane nodata" id="p-charts"><div class="empty" id="charts-empty"><div class="t1">No charts yet</div>The Manhattan and QQ plots appear once the R engine has run.</div>
+          <div class="section-h">Manhattan plot</div><div id="manhattan" class="plot"></div>
+          <div class="section-h">QQ plot</div><div id="qq" class="plot"></div><div class="who-line" id="engine"></div></div>
+        <div class="pane" id="p-evidence"></div>
+        <div class="pane" id="p-report"></div>
+        <div class="pane" id="p-audit"></div>
+        <div class="pane" id="p-tour">
+          <div class="tour-bar"><b>Guided tour</b><span class="who-line">An animated walk through one question, for presenting.
+            Numbers shown are from the default simulated study.</span><a href="/static/tour.html" target="_blank">Open in new window &#8599;</a></div>
+          <iframe class="tour-frame" id="tour-frame" title="LabCrew Lite guided tour" allowfullscreen></iframe>
+        </div>
+        <div class="pane" id="p-arch"></div>
+      </div>
+
+      <div class="card gate">
+        <div class="gh"><div class="gh-ico">&#10003;</div><div><div class="gh-title">Your decision</div>
+          <div class="gh-sub">Human approval gate</div></div><span class="pill" id="gate-badge" style="margin-left:auto">idle</span></div>
+        <div class="gb" id="gate"></div>
+        <div class="gf" id="gate-actions" hidden>
+          <button class="btn btn-ok" id="approve">&#10003; Approve selected</button>
+          <button class="btn btn-no" id="reject">&#10005; Reject all</button>
+        </div>
+      </div>
+    </div>
+  </section>
+</div>
+<div class="toasts" id="toasts" role="status" aria-live="polite"></div>
+
+<script>
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+let sid = null, timer = null, S = null, plotted = false, viewRound = null, gateRound = 0, archDone = false, fails = 0;
+
+// FastAPI errors: `detail` is a string (HTTPException) or a list of {msg, loc} (request validation, 422).
+function errText(d, fallback) {
+  if (Array.isArray(d)) return d.map(x => String(x.msg || x).replace(/^Value error, /, "")).join("; ");
+  return typeof d === "string" && d ? d : fallback;
+}
+async function api(path, body) {
+  const r = await fetch(path, body ? {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(body)} : {});
+  if (!r.ok) {
+    let d; try { d = (await r.json()).detail; } catch { d = null; }
+    const e = new Error(errText(d, `${r.status} ${r.statusText}`)); e.status = r.status; throw e;
+  }
+  return r.json();
+}
+function toast(msg, kind = "info", ms = 7000) {
+  const t = document.createElement("div");
+  t.className = `toast ${kind}`; t.innerHTML = `<span>${esc(msg)}</span><button class="x" aria-label="Dismiss">&times;</button>`;
+  t.querySelector(".x").onclick = () => t.remove();
+  $("toasts").appendChild(t);
+  if (ms) setTimeout(() => t.remove(), ms);
+}
+function resetToStart(message) {          // forget the session in the page and the URL
+  clearInterval(timer); sid = null; S = null; plotted = false; viewRound = null; gateRound = 0;
+  history.replaceState(null, "", location.pathname + location.hash);
+  $("run").disabled = false; $("status").hidden = true;
+  $("title").textContent = "GWAS study"; $("qline").textContent = "Ask a question to start an analysis.";
+  $("p-charts").classList.add("nodata");
+  renderStepper(); renderTiles(); renderSummary(); renderEvidence(); renderReport(); renderGate();
+  if ($("p-audit").classList.contains("on")) renderAudit();
+  if (message) toast(message, "warn");
+}
+
+/* ------------------------------------------------------------------ tabs */
+document.querySelectorAll(".tab").forEach(b => b.onclick = () => openTab(b.dataset.p));
+function openTab(p) {
+  document.querySelectorAll(".tab").forEach(x => x.classList.toggle("on", x.dataset.p === p));
+  document.querySelectorAll(".pane").forEach(x => x.classList.toggle("on", x.id === "p-" + p));
+  $("grid").classList.toggle("wide", p === "arch" || p === "tour");      // full width for the explainers
+  if (p === "charts") { drawPlots(); setTimeout(() => window.dispatchEvent(new Event("resize")), 50); }
+  if (p === "audit") renderAudit();
+  if (p === "arch") renderArch();
+  if (p === "tour" && !$("tour-frame").src) $("tour-frame").src = "/static/tour.html";
+}
+$("go-arch").onclick = () => openTab("arch");
+
+/* ------------------------------------------------------------------ sidebar */
+api("/api/health").then(h => {
+  $("hdot").classList.add("on"); $("htext").textContent = "API online · " + h.data;
+  const llm = h.llm || {}, short = m => m.split("/").pop();
+  $("llmtext").textContent = llm.mode === "mock" ? "LLM: offline scripted agent (mock)"
+    : llm.models?.length ? `LLM: ${short(llm.models[0])}${llm.models.length > 1 ? ` · backups ${llm.models.slice(1).map(short).join(", ")}` : ""}` : "";
+}).catch(() => { $("htext").textContent = "API offline"; });
+api("/api/examples").then(qs => {
+  $("examples").innerHTML = `<option value="">Choose one of ${qs.length} example questions…</option>` +
+    qs.map(q => `<option value="${esc(q.question)}" title="${esc(q.question)}">${esc(q.id)} · ${esc(q.question)}</option>`).join("");
+}).catch(() => { $("examples").innerHTML = `<option value="">Examples unavailable</option>`; });
+$("examples").onchange = e => {           // fills the question box; the dropdown resets so it reads as a picker
+  if (!e.target.value) return;
+  $("question").value = e.target.value; e.target.selectedIndex = 0; $("question").focus();
+};
+document.addEventListener("keydown", e => {
+  if ((e.ctrlKey || e.metaKey) && e.key === "Enter" && document.activeElement === $("question") && !$("run").disabled) $("run").click();
+});
+
+$("run").onclick = async () => {
+  const question = $("question").value.trim();
+  if (question.length < 3) { toast("Type a question first (at least 3 characters).", "warn"); $("question").focus(); return; }
+  const rounds = Math.min(3, Math.max(1, Math.round(+$("rounds").value || 2)));
+  $("run").disabled = true;
+  let newSid;
+  try {
+    newSid = (await api("/api/sessions", {question, reviewer: $("reviewer").value.trim() || "scientist",
+                                          seed: Math.round(+$("seed").value) || 2026, rounds})).session_id;
+  } catch (e) { $("run").disabled = false; toast(e.message, "bad", 10000); return; }
+  sid = newSid; plotted = false; viewRound = null; gateRound = 0; S = null; fails = 0;
+  $("p-charts").classList.add("nodata");
+  $("qline").textContent = question;
+  history.replaceState(null, "", `?session=${sid}`);            // a page refresh re-attaches to this session
+  openTab("summary"); clearInterval(timer); timer = setInterval(refresh, 1500); refresh();
+};
+
+// Deep links: ?session=<id> re-attaches to a running session; #summary, #charts, ... #arch open a tab.
+// Runs after the whole script has loaded, so every definition below (e.g. the architecture diagrams) exists.
+document.addEventListener("DOMContentLoaded", () => {
+  const qs = new URLSearchParams(location.search), tabs = [...document.querySelectorAll(".tab")].map(b => b.dataset.p);
+  if (qs.get("session")) { sid = qs.get("session"); $("run").disabled = true; timer = setInterval(refresh, 1500);
+    refresh().then(() => { if (S) $("qline").textContent = S.question; }); }
+  const h = location.hash.slice(1);
+  if (tabs.includes(h)) openTab(h);
+});
+
+/* ------------------------------------------------------------------ polling */
+async function refresh() {
+  const asked = sid;
+  if (!asked) return;
+  try { S = await api(`/api/sessions/${asked}`); }
+  catch (e) {
+    if (asked !== sid) return;
+    if (e.status === 404) { resetToStart("That session no longer exists (the server was restarted). Start a new analysis."); return; }
+    if (++fails === 3) {                  // the server stopped or the network dropped: say so instead of freezing
+      $("status").hidden = false; $("status").className = "pill offline"; $("status").textContent = "Connection lost";
+      toast("Lost the connection to the server. Retrying… (is run.bat still running?)", "bad", 0);
+    }
+    return;
+  }
+  if (asked !== sid) return;              // a newer session was started while this request was in flight
+  if (fails >= 3) { document.querySelectorAll(".toast.bad").forEach(t => t.remove()); toast("Connection restored.", "good", 3000); }
+  fails = 0;
+  render();
+  if (["finished", "needs_review", "error"].includes(S.status)) { clearInterval(timer); $("run").disabled = false; }
+}
+const last = () => S && S.rounds.length ? S.rounds[S.rounds.length - 1] : null;
+const shown = () => S && S.rounds.length ? S.rounds[(viewRound ?? S.rounds.length) - 1] : null;
+
+function render() {
+  const labels = {running:"Agents working", awaiting_approval:"Waiting for you", finished:"Finished",
+                  needs_review:"Stopped · needs human review", error:"Error"};
+  $("status").hidden = false; $("status").className = "pill " + S.status; $("status").textContent = labels[S.status] || S.status;
+  $("title").textContent = `GWAS study · round ${S.current_round} of ${S.rounds_max}`;
+  renderStepper(); renderTiles(); renderSummary(); renderEvidence(); renderReport(); renderGate();
+  if (!plotted && S.rounds.some(r => r.gwas) && $("p-charts").classList.contains("on")) drawPlots();
+  if ($("p-audit").classList.contains("on")) renderAudit();
+}
+
+/* ------------------------------------------------------------------ stepper */
+const STEPS = [["run_gwas", "Statistics", "R engine"], ["check_rules", "Rules", "code"], ["rank_for_assay", "Ranking", "R engine"],
+               ["search_docs", "Documents", "RAG"], ["verify_report", "Review", "Reviewer agent"],
+               ["gate", "Your decision", "human"], ["assay", "Assay", "simulated lab"]];
+function renderStepper() {
+  const p = S ? S.progress : [], st = S ? S.status : "idle", lr = last();
+  const roundDone = lr && lr.round === S?.current_round && (lr.report_md || lr.error);
+  let html = "", activeSet = false;
+  STEPS.forEach(([key, name, who], i) => {
+    let cls = "";
+    if (key === "gate") cls = st === "awaiting_approval" ? "wait" : (lr?.human && lr.round === S.current_round ? "done" : "");
+    else if (key === "assay") cls = lr?.assay && lr.round === S.current_round ? "done" : "";
+    else cls = p.includes(key) ? "done" : "";
+    if (st === "needs_review" && !cls && !activeSet) { cls = "bad"; activeSet = true; }
+    if (st === "running" && !cls && !activeSet && !roundDone) { cls = "active"; activeSet = true; }
+    html += `<div class="step ${cls}"><span class="n">${cls === "done" ? "&#10003;" : i + 1}</span><span>${name}<span class="who">${who}</span></span></div>`;
+  });
+  $("stepper").innerHTML = html;
+}
+renderStepper();
+
+/* ------------------------------------------------------------------ tiles */
+function tile(k, v, s, cls = "") { return `<div class="tile ${cls}"><div class="k">${k}</div><div class="v">${v}</div><div class="s">${s}</div></div>`; }
+function renderTiles() {
+  const r = shown(), g = r?.gwas;
+  if (!g) { $("tiles").innerHTML = ["Code decision", "Lambda (λ)", "Bonferroni hits", "Variants tested", "Number check", "Reviewer agent"]
+              .map(k => tile(k, "—", S ? "waiting for the agents" : "run an analysis")).join(""); return; }
+  const qc = Object.values(g.qc_failed_by).reduce((a, b) => a + b, 0), out = r.decision.outcome;
+  $("tiles").innerHTML =
+    tile("Code decision", out, `rules v${r.decision.rules_version} · not the LLM`, out === "CONFIRM" ? "good" : out === "FAIL" ? "bad" : "warn") +
+    tile("Lambda (λ)", g.lambda_gc, "required 0.95 – 1.05", g.lambda_gc >= 0.95 && g.lambda_gc <= 1.05 ? "good" : "bad") +
+    tile("Bonferroni hits", g.n_hits, `p < ${(+g.bonferroni_threshold).toExponential(3)}`) +
+    tile("Variants tested", g.n_tested, `of ${g.n_variants} · ${qc} QC removals`) +
+    tile("Number check", r.guards.numbers_ok ? "✓ exact" : "✗", "summary vs tool log", r.guards.numbers_ok ? "good" : "bad") +
+    tile("Reviewer agent", r.review?.supported ? "Supported" : "Not supported", `${r.analyst_attempts} Analyst attempt(s)`, r.review?.supported ? "good" : "warn");
+}
+renderTiles();
+
+/* ------------------------------------------------------------------ summary */
+function roundPicker() {
+  if (!S || S.rounds.length < 2) return "";
+  return `<div class="seg">${S.rounds.map((r, i) => `<button class="${(viewRound ?? S.rounds.length) === i + 1 ? "on" : ""}" onclick="viewRound=${i + 1};render()">Round ${i + 1}</button>`).join("")}</div>`;
+}
+function fmtSummary(t) {
+  return esc(t).replace(/\[([^\]]+ §[^\]]+)\]/g, '<span class="cite">[$1]</span>')
+               .replace(/\((run_gwas|check_rules|rank_for_assay|search_docs)\)/g, '<span class="toolref">$1</span>');
+}
+function working(msg) { return `<div class="who-line">${msg}</div><div class="skel" style="width:70%"></div><div class="skel"></div><div class="skel" style="width:55%"></div><div class="skel" style="width:85%"></div>`; }
+function renderSummary() {
+  const el = $("p-summary"), r = shown();
+  if (!S) { el.innerHTML = `<div class="empty"><div class="t1">No analysis yet</div>Pick a question on the left and press <b>Run analysis</b>.<br>
+      The Analyst agent will call the R statistics, the rules check, the ranking and the document search.</div>`; return; }
+  if (!r || (!r.report_md && !r.error)) { el.innerHTML = working("The Analyst agent is calling its tools: " + (S.progress.join(" → ") || "starting…")); return; }
+  if (r.error) { const why = r.error.startsWith("LLMQuotaExhausted") ? "The LLM provider refused the request, so nothing was shown or run." : "The code guards refused the agents' answer, so nothing was shown or run."; el.innerHTML = `<div class="alert bad"><b>This round stopped before reaching you.</b> ${why}<br><span class="mono">${esc(r.error)}</span></div>`; return; }
+  const d = r.decision;
+  el.innerHTML = roundPicker() +
+    `<div class="section-h">Analyst summary · LLM, every number checked against the tool log</div>
+     <div class="summary">${fmtSummary(r.summary)}</div>
+     <div class="who-line">Written by the Analyst agent from tool outputs. Grey tags name the tool behind each claim; blue tags are document citations.</div>
+     <div class="section-h">Decision by code: <span class="badge ${d.outcome === "CONFIRM" ? "b-good" : d.outcome === "FAIL" ? "b-bad" : "b-warn"}">${d.outcome}</span> · rules v${esc(d.rules_version)}</div>
+     <table class="t"><tr><th>rule</th><th>observed</th><th>result</th><th>explanation</th></tr>
+     ${d.rule_results.map(x => `<tr><td class="mono">${esc(x.rule_id)}</td><td>${esc(x.observed)}</td><td><span class="badge ${x.status === "pass" ? "b-good" : x.status === "fail" ? "b-bad" : "b-warn"}">${x.status}</span></td><td>${esc(x.explanation)}</td></tr>`).join("")}</table>
+     <div class="section-h">Proposed for the functional assay · from rank_for_assay</div>
+     <table class="t"><tr><th>variant</th><th>PIP</th><th>p</th><th>beta</th><th>Bonferroni</th></tr>
+     ${r.proposal_rows.map(x => `<tr><td class="mono">${esc(x.variant_id)}</td><td>${x.pip}</td><td>${x.p}</td><td>${x.beta}</td><td>${x.bonferroni_hit ? '<span class="badge b-good">hit</span>' : '<span class="badge b-mute">no</span>'}</td></tr>`).join("")}</table>
+     ${r.assay ? `<div class="section-h">Functional assay result · simulated lab</div>
+       <table class="t"><tr><th>variant</th><th>assay</th></tr>${r.assay.map(a => `<tr><td class="mono">${a.variant_id}</td><td>${a.assay_positive ? '<span class="badge b-good">positive</span>' : '<span class="badge b-mute">negative</span>'}</td></tr>`).join("")}</table>
+       <div class="who-line">Confirmation rule (code): ${esc(r.assay_decision.outcome)} · ${esc(r.assay_decision.reasons.join("; "))}</div>` : ""}
+     ${S.truth && S.truth.power !== undefined ? truthBlock() : ""}`;
+}
+function truthBlock() {
+  const t = S.truth;
+  return `<div class="section-h">Against the planted truth · possible only because the data are simulated</div>
+    <div class="alert info">Power <b>${t.power}</b> (Bonferroni found ${t.true_positives.join(", ") || "none"}; missed ${t.missed.join(", ") || "none"}) ·
+    false-positive rate <b>${t.false_positive_rate}</b> · assay true replications: <b>${t.assay_true_replications.join(", ") || "none"}</b> ·
+    assay false positives: <b>${t.assay_false_replications.join(", ") || "none"}</b></div>`;
+}
+renderSummary();
+
+/* ------------------------------------------------------------------ evidence */
+function renderEvidence() {
+  const el = $("p-evidence"), r = shown();
+  if (!r || !r.report_md) { el.innerHTML = `<div class="empty"><div class="t1">No evidence yet</div>Sources appear when the Analyst has searched the documents.</div>`; return; }
+  const ctl = r.sop_versions.map(v => `<div class="alert ${v.conflict ? "warn" : "good"}"><b>${esc(v.sop_id)}</b>: used <span class="mono">${esc(v.chosen_doc_id)}</span> (latest approved)${v.ignored.length ? " · not used: " + esc(v.ignored.join(", ")) : ""}${v.conflict ? `<br><b>SOP conflict, please check:</b> ${esc(v.conflict_detail)}` : ""}</div>`).join("")
+    + r.quarantined.map(q => `<div class="alert bad"><b>Quarantined · possible prompt injection:</b> <span class="mono">${esc(q.doc_id)}</span> (${esc(q.flags.join(", "))}). Hidden from the agents; shown only to you.</div>`).join("");
+  const g = r.guards;
+  el.innerHTML = roundPicker() +
+    `<div class="section-h">Document control · decided by code</div>${ctl || '<div class="who-line">No SOP version decisions or quarantined documents in this round\'s searches.</div>'}
+     <div class="section-h">Passages the agents saw · ${r.sources.length}</div>
+     ${r.sources.map(x => `<div class="passage"><div class="c">${esc(x.citation)}</div><div class="x">${esc(x.text)}</div></div>`).join("")}
+     <div class="section-h">Checks · code</div>
+     <table class="t">
+       <tr><td>Every number in the summary matches this session's tool log</td><td>${g.numbers_ok ? '<span class="badge b-good">yes</span>' : '<span class="badge b-bad">no</span>'}</td></tr>
+       <tr><td>Required tools ran (run_gwas, check_rules, rank_for_assay)</td><td>${!g.missing_tools.length ? '<span class="badge b-good">yes</span>' : '<span class="badge b-bad">missing ' + esc(g.missing_tools.join(", ")) + '</span>'}</td></tr>
+       <tr><td>Every proposal came from the ranking tool</td><td>${!g.invalid_proposals.length ? '<span class="badge b-good">yes</span>' : '<span class="badge b-bad">' + esc(g.invalid_proposals.join(", ")) + '</span>'}</td></tr>
+       <tr><td>Reviewer agent (second opinion)</td><td>${r.review.supported ? '<span class="badge b-good">supported</span>' : '<span class="badge b-warn">not supported</span>'} ${esc((r.review.issues || []).join("; "))}</td></tr>
+       <tr><td>Statistics engine</td><td><span class="badge b-r">R ${esc(r.gwas.engine.R)} · coloc ${esc(r.gwas.engine.coloc)}</span></td></tr>
+     </table>`;
+}
+
+/* ------------------------------------------------------------------ full report */
+function renderReport() {
+  const el = $("p-report"), r = shown();
+  if (!r || !r.report_md) { el.innerHTML = `<div class="empty"><div class="t1">No report yet</div>The report appears when a round reaches you.</div>`; return; }
+  el.innerHTML = roundPicker() + `<div class="who-line">Exactly what the reviewer sees. Its SHA-256 goes into the audit log with the decision:
+    <span class="mono">${esc(r.report_sha256.slice(0, 16))}…</span></div><div class="report">${DOMPurify.sanitize(marked.parse(r.report_md))}</div>`;
+}
+
+/* ------------------------------------------------------------------ audit */
+async function renderAudit() {
+  const el = $("p-audit");
+  if (!sid) { el.innerHTML = `<div class="empty"><div class="t1">Nothing audited yet</div>Every decision and every tool call of a session appears here.</div>`; return; }
+  const asked = sid;
+  let aud, tools;
+  try { [aud, tools] = await Promise.all([api(`/api/sessions/${asked}/audit`), api(`/api/sessions/${asked}/tools`)]); }
+  catch (e) { if (asked === sid) el.innerHTML = `<div class="alert bad">Could not load the audit log: ${esc(e.message)}</div>`; return; }
+  if (asked !== sid) return;
+  el.innerHTML = `<div class="section-h">Human decisions</div>` +
+    (aud.length ? `<table class="t"><tr><th>time (UTC)</th><th>round</th><th>reviewer</th><th>approved</th><th>code decision</th><th>rules</th><th>report hash</th><th>comment</th></tr>
+      ${aud.map(a => `<tr><td class="mono">${esc(a.timestamp.slice(11, 19))}</td><td>${a.round}</td><td>${esc(a.reviewer)}</td><td class="mono">${esc(a.approved.join(", ") || "none")}</td><td>${esc(a.code_decision)}</td><td>v${esc(a.rules_version)}</td><td class="mono">${esc(a.shown_report_sha256.slice(0, 10))}…</td><td>${esc(a.comment)}</td></tr>`).join("")}</table>`
+      : `<div class="who-line">No decisions yet.</div>`) +
+    `<div class="section-h">Tool-call log · every calculation, with versions</div>
+     <table class="t"><tr><th>time (UTC)</th><th>tool</th><th>version</th><th>round</th><th>inputs</th></tr>
+     ${tools.map(t => { const {round, ...rest} = t.inputs; return `<tr><td class="mono">${esc(t.timestamp.slice(11, 19))}</td><td class="mono">${esc(t.tool)}</td><td>${esc(t.tool_version)}</td><td>${round ?? ""}</td><td class="mono">${esc(JSON.stringify(rest)).slice(0, 90)}</td></tr>`; }).join("")}</table>`;
+}
+
+/* ------------------------------------------------------------------ decision gate */
+function renderGate() {
+  const st = S ? S.status : "idle", lr = last(), badge = $("gate-badge");
+  $("gate-actions").hidden = st !== "awaiting_approval";
+  badge.className = "pill " + (S ? st : ""); badge.textContent = {awaiting_approval:"action needed", running:"agents working", finished:"done",
+    needs_review:"stopped", error:"error"}[st] || "idle";
+  if (st === "awaiting_approval") {
+    if (gateRound === lr.round) return;          // keep the reviewer's ticks while polling
+    gateRound = lr.round;
+    $("gate").innerHTML = `<p style="margin-top:0">Code decided <b>${esc(lr.decision.outcome)}</b>. You decide which variants go to the
+        functional assay (${lr.proposal_rows.length} shortlisted by the rules). Nothing runs until you click.</p>
+      ${lr.proposal_rows.map(x => `<label class="vrow"><input type="checkbox" value="${esc(x.variant_id)}" checked>
+        <span class="id">${esc(x.variant_id)}</span>${x.bonferroni_hit ? '<span class="badge b-good">Bonferroni hit</span>' : ""}
+        <span class="meta">PIP ${x.pip}<br>p ${x.p}</span></label>`).join("")}
+      ${lr.guards && lr.review && !lr.review.supported ? `<div class="alert warn">The Reviewer agent did not support this report: ${esc(lr.review.issues.join("; "))}</div>` : ""}
+      ${lr.proposal_rows.length ? "" : `<div class="alert warn">No variant was shortlisted this round, so there is nothing to approve.</div>`}
+      <textarea id="comment" rows="2" placeholder="Comment for the audit log (optional)"></textarea>`;
+    document.querySelectorAll("#gate input[type=checkbox]").forEach(c => c.onchange = syncApprove);
+    $("reject").disabled = false; syncApprove();
+    return;
+  }
+  gateRound = 0;
+  if (!S) $("gate").innerHTML = `<div class="who-line">When the agents finish a round, the proposed variants appear here for your approval.</div>`;
+  else if (st === "running") $("gate").innerHTML = working("Waiting for the agents and the code checks…");
+  else if (st === "needs_review") $("gate").innerHTML = `<div class="alert bad"><b>Stopped before reaching you.</b> ${esc(S.stop_reason)}</div>`;
+  else if (st === "error") $("gate").innerHTML = `<div class="alert bad">${esc(S.error)}</div>`;
+  else if (st === "finished") $("gate").innerHTML = `<div class="alert good"><b>Session finished:</b> ${esc(S.stop_reason)}</div>` +
+    S.rounds.filter(r => r.human).map(r => `<div class="who-line">Round ${r.round}: approved ${esc(r.human.approved.join(", ") || "none")}</div>`).join("");
+}
+renderGate();
+function syncApprove() {               // the approve button says how many variants go to the lab, and needs at least one
+  const n = document.querySelectorAll("#gate input[type=checkbox]:checked").length;
+  $("approve").disabled = n === 0;
+  $("approve").innerHTML = n ? `&#10003; Approve ${n} variant${n > 1 ? "s" : ""}` : "&#10003; Approve selected";
+}
+async function decide(approve) {
+  $("approve").disabled = $("reject").disabled = true;
+  try { await api(`/api/sessions/${sid}/decision`, {approve, comment: ($("comment") || {}).value || ""}); }
+  catch (e) { toast(e.message, "bad", 10000); $("reject").disabled = false; syncApprove(); return; }
+  toast(approve.length ? `Sent ${approve.join(", ")} to the simulated assay.` : "Rejected all proposals. The session will finish.", "good", 4000);
+  viewRound = null; refresh();
+}
+$("approve").onclick = () => decide([...document.querySelectorAll("#gate input:checked")].map(x => x.value));
+$("reject").onclick = () => decide([]);
+
+/* ------------------------------------------------------------------ charts */
+async function drawPlots() {
+  if (!sid || plotted) return;
+  const asked = sid;
+  let p; try { p = await api(`/api/sessions/${asked}/plot`); } catch { return; }
+  if (asked !== sid || plotted) return;
+  plotted = true;
+  $("p-charts").classList.remove("nodata");   // show the plot boxes before Plotly measures them
+  const layout = (x, y) => ({margin:{l:48, r:10, t:10, b:42}, paper_bgcolor:"rgba(0,0,0,0)", plot_bgcolor:"rgba(0,0,0,0)",
+    font:{family:"Inter", color:"#4b5563", size:12}, xaxis:{title:x, gridcolor:"#eef0f4"}, yaxis:{title:y, gridcolor:"#eef0f4"}, showlegend:false});
+  const thr = -Math.log10(p.bonferroni_threshold), hit = p.neglog10p.map(v => v > thr);
+  Plotly.newPlot("manhattan", [{x:p.position, y:p.neglog10p, text:p.variant_ids, mode:"markers", type:"scattergl",
+    marker:{size:hit.map(h => h ? 8 : 4), color:hit.map(h => h ? "#dc2626" : "#4f46e5"), opacity:.8},
+    hovertemplate:"%{text}<br>-log10 p %{y}<extra></extra>"}],
+    {...layout("variant position", "-log10 p"), shapes:[{type:"line", xref:"paper", x0:0, x1:1, y0:thr, y1:thr, line:{dash:"dot", color:"#dc2626", width:1}}]},
+    {displayModeBar:false, responsive:true});
+  const mx = Math.max(...p.qq_expected);
+  Plotly.newPlot("qq", [{x:p.qq_expected, y:p.qq_observed, mode:"markers", type:"scattergl", marker:{size:4, color:"#4f46e5"}},
+    {x:[0, mx], y:[0, mx], mode:"lines", line:{dash:"dot", color:"#8b93a3", width:1}}],
+    layout("expected -log10 p", "observed -log10 p"), {displayModeBar:false, responsive:true});
+  $("engine").textContent = `Computed in R ${p.engine.R} (lm per variant, coloc ${p.engine.coloc}). Red points: p below the Bonferroni threshold (above the dotted line).`;
+}
+
+/* ------------------------------------------------------------------ architecture */
+const ARCH = [
+  {k:"1", t:"The system in one picture", p:"Four kinds of worker, each with one job. Indigo calls a language model; blue is R; grey is plain code; green is you.",
+   m:`flowchart LR
+  U(["Scientist in the browser"])
+  API["FastAPI<br/>sessions, decisions, page"]
+  F["CrewAI Flow<br/>fixed steps + human gate"]
+  A["Analyst agent<br/>chooses and calls tools"]
+  RV["Reviewer agent<br/>checks the report"]
+  T1["run_gwas"]
+  RE[("R engine<br/>lm + coloc")]
+  T2["check_rules<br/>YAML rules"]
+  T3["rank_for_assay"]
+  T4["search_docs<br/>BM25 + FAISS"]
+  T5["verify_report<br/>number check"]
+  GU{"Code guards"}
+  HU{{"Human approves"}}
+  LAB["Simulated assay"]
+  LOG[("Tool log + audit log<br/>per session")]
+  U -->|"question, approval"| API
+  API --> F
+  F --> A
+  F --> RV
+  A --> T1
+  T1 --> RE
+  A --> T2
+  A --> T3
+  A --> T4
+  RV --> T5
+  F --> GU
+  GU --> HU
+  HU --> LAB
+  T1 -.-> LOG
+  T5 -.-> LOG
+  LAB -.-> LOG
+  classDef llm fill:#eef0ff,stroke:#4f46e5,color:#1e1b4b
+  classDef rr fill:#dbeafe,stroke:#2563eb,color:#1e3a8a
+  classDef py fill:#f1f5f9,stroke:#64748b,color:#1f2937
+  classDef hu fill:#dcfce7,stroke:#15803d,color:#14532d
+  class A,RV llm
+  class RE rr
+  class API,F,T1,T2,T3,T4,T5,GU,LAB,LOG py
+  class U,HU hu`},
+  {k:"2", t:"One round, step by step", p:"The Flow fixes the order. The agents choose tool calls inside their task; code checks the result before you see anything.",
+   m:`sequenceDiagram
+  autonumber
+  participant You
+  participant API as FastAPI
+  participant Flow as CrewAI Flow
+  participant An as Analyst agent
+  participant R as R engine
+  participant Rev as Reviewer agent
+  You->>API: question
+  API->>Flow: start session (thread)
+  Flow->>An: task: analyse and report
+  An->>R: run_gwas (QC, lm, lambda, coloc)
+  An->>Flow: check_rules, rank_for_assay, search_docs
+  An->>Flow: submit_report (guardrail checks numbers, citations, verdict)
+  Flow->>Rev: task: review the report
+  Rev->>Flow: verify_report, submit_review
+  Flow->>Flow: code guards (tools ran, proposals valid, numbers exact)
+  Flow->>You: report + proposed variants
+  You->>API: approve or reject
+  API->>Flow: decision unblocks the gate
+  Flow->>Flow: audit log, simulated assay, rules, next round`},
+];
+const ROLES = `<div class="roles">
+  <div class="role r"><div class="rt">R · statistics</div><ul><li>Variant QC (MAF, call rate, Hardy-Weinberg)</li><li><code>lm()</code> per variant, age + sex adjusted</li><li>Lambda, Bonferroni</li><li><code>coloc::finemap.abf</code> Bayes factors → PIP</li></ul></div>
+  <div class="role py"><div class="rt">Python code · rules + control</div><ul><li>Rules engine on the versioned YAML</li><li>Code guards and guardrails</li><li>Document search, SOP versions, injection quarantine</li><li>Tool log, audit log, FastAPI</li></ul></div>
+  <div class="role llm"><div class="rt">CrewAI agents · words</div><ul><li>Analyst: decides which tools to call, writes the cited summary</li><li>Reviewer: checks numbers and citations</li><li>Groq <code>gpt-oss-120b</code>, with <code>gpt-oss-20b</code> and <code>qwen3</code> as backups when a daily quota runs out; temperature 0, cached</li></ul></div>
+  <div class="role hu"><div class="rt">You · decisions</div><ul><li>Approve or reject each variant</li><li>Every decision audited with the report hash</li><li>Nothing reaches the lab without you</li></ul></div></div>`;
+const RULES = `<ol class="rules">
+  <li><b>The LLM never computes a number.</b> Statistics run in R; the agents only call tools. Every number in a summary must match a number a tool produced in this session, checked by code.</li>
+  <li><b>Pass/fail comes only from code and the versioned rules file.</b> A verdict may appear in the summary only as the exact token <code>check_rules</code> returned; free-text verdicts are rejected.</li>
+  <li><b>Every claim points to its evidence:</b> a tool name or a <code>[document §section]</code> citation that search actually returned.</li>
+  <li><b>Code checks the agents after they finish:</b> the required tools must have run, and every proposed variant must come from the ranking tool (this stops an injected document pushing var0333).</li>
+  <li><b>No agent can run the lab.</b> The Flow runs the assay, and only after your approval.</li></ol>`;
+const DOUBLE = `<p>The statistics are programmed twice, independently: in R (the engine the app uses) and in vectorized Python (kept only as a check).
+  A test runs both on the same data and requires them to agree on every number the rules judge, the top-10 ranking and each variant's beta, SE, p and PIP.
+  This is <b>independent double programming</b>, a standard way to validate statistical results in regulated work.</p>`;
+function renderArch() {
+  if (archDone) return; archDone = true;
+  $("p-arch").innerHTML = ARCH.map(s => `<div class="arch-sec"><h3><span class="k">${s.k}</span>${s.t}</h3><p>${s.p}</p><div class="mm"><pre class="mermaid">${esc(s.m)}</pre></div></div>`).join("")
+    + `<div class="arch-sec"><h3><span class="k">3</span>Who does what</h3><p>Each technology has exactly one job.</p>${ROLES}</div>`
+    + `<div class="arch-sec"><h3><span class="k">4</span>The hard rules, and the code that enforces them</h3>${RULES}</div>`
+    + `<div class="arch-sec"><h3><span class="k">5</span>Why R and Python both compute the statistics</h3>${DOUBLE}</div>`;
+  // Labels are measured when drawn: wait for the Inter web font first, and use SVG text labels,
+  // otherwise Mermaid measures a fallback font and clips the text inside the boxes.
+  mermaid.initialize({startOnLoad:false, theme:"base", securityLevel:"strict", flowchart:{htmlLabels:false, curve:"basis"},
+    themeVariables:{fontFamily:"Inter, sans-serif", fontSize:"13px", primaryColor:"#f1f5f9", lineColor:"#94a3b8"}});
+  // Render one diagram at a time and insert each SVG ourselves (mermaid.run on several at once mixed them up).
+  document.fonts.ready.then(async () => {
+    const pres = [...document.querySelectorAll("#p-arch pre.mermaid")];
+    for (let i = 0; i < pres.length; i++) {
+      try { const {svg} = await mermaid.render(`mmsvg-${i}`, pres[i].textContent); pres[i].outerHTML = svg; }
+      catch (e) { pres[i].textContent = "Diagram could not be drawn: " + e.message; }
+    }
+  });
+}
+</script>
+</body>
+</html>

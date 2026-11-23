@@ -1,0 +1,40 @@
+# FICTIONAL QC and decision rules for a SIMULATED GWAS. Not real study criteria.
+# Bump `version` on any change; the file hash is recorded on every decision.
+pack: gwas
+version: "1.2.0"
+effective_date: "2026-11-22"
+# 1.2.0: the assay shortlist only holds variants that are Bonferroni hits or have PIP >= assay_min_pip,
+#        so the budget is no longer filled with weak candidates.
+# 1.1.0: prior effect SD now follows the coloc convention for quantitative traits (0.15 x SD of the trait),
+#        because the Bayes factors are computed by coloc::finemap.abf in the R engine.
+settings:
+  # Bonferroni: family-wise alpha divided by the number of variants actually tested after QC.
+  # (Real genome-wide studies use ~5e-8, i.e. ~1 million independent tests; this panel is tiny.)
+  family_wise_alpha: 0.05
+  # Wakefield approximate Bayes factor prior: true effect ~ Normal(0, W^2) with W = 0.15 x SD(trait)
+  # (coloc's fixed default for quantitative traits; the R engine uses it, this value documents it),
+  # and a prior probability that any single variant is associated.
+  prior_effect_sd_in_trait_sd: 0.15
+  prior_prob_associated: 0.001
+  # SOP-GEN-004: at most this many variants go to the functional assay per round.
+  assay_budget: 5
+  # A variant is shortlisted only if it passes Bonferroni OR its posterior inclusion probability is at least this.
+  assay_min_pip: 0.1
+rules:
+  # --- per-variant QC filters (applied to every variant before testing)
+  - {id: maf_min, stage: item_filter, kind: min, metric: maf, min: 0.01,
+     description: "Minor allele frequency at least 0.01"}
+  - {id: call_rate_min, stage: item_filter, kind: min, metric: call_rate, min: 0.95,
+     description: "Variant call rate at least 0.95"}
+  - {id: hwe_min, stage: item_filter, kind: min, metric: hwe_p, min: 1.0e-6,
+     description: "Hardy-Weinberg p at least 1e-6 (strong departure suggests genotyping error)"}
+  # --- study-level decision rules
+  - {id: qc_fail_fraction_max, kind: max, metric: qc_fail_fraction, max: 0.10,
+     description: "QC passes: at most 10 % of variants removed by the filters above (fictional)"}
+  - {id: lambda_range, kind: range, metric: lambda_gc, min: 0.95, max: 1.05,
+     description: "Genomic inflation factor lambda between 0.95 and 1.05"}
+  - {id: hits_min, kind: min, metric: n_hits, min: 1,
+     description: "At least one variant beyond the Bonferroni threshold"}
+  # --- confirmation: judged on the (simulated) functional assay results
+  - {id: assay_positive_min, stage: confirmation, kind: min, metric: n_assay_positive, min: 1,
+     description: "At least one assayed variant replicates in the functional assay"}

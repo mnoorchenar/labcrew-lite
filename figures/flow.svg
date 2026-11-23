@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="190" viewBox="0 0 1000 190" role="img" aria-label="GWAS Crew flow: question, Analyst agent with tools, code guards, Reviewer agent, human approval, simulated assay, truth check">
+  <rect width="1000" height="190" rx="12" fill="#ffffff" stroke="#d5d9e2"/>
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="#5f6880"/></marker>
+    <style>
+      .n{fill:#f4f6fb;stroke:#9aa3b8;stroke-width:1.2}
+      .ag{fill:#e8f0ff;stroke:#3b6fd4;stroke-width:1.4}
+      .cd{fill:#e9f7ee;stroke:#2f9e5b;stroke-width:1.4}
+      .hu{fill:#fff4dd;stroke:#d9922b;stroke-width:1.4}
+      text{font:600 13px system-ui,Segoe UI,Arial,sans-serif;fill:#1d2433;text-anchor:middle}
+      .s{font:400 11px system-ui,Segoe UI,Arial,sans-serif;fill:#4a5368}
+      .l{stroke:#5f6880;stroke-width:1.5;fill:none;marker-end:url(#a)}
+    </style>
+  </defs>
+  <rect class="n"  x="14"  y="60" width="100" height="56" rx="8"/><text x="64"  y="86">Question</text><text class="s" x="64" y="103">GWAS / QC / SOP</text>
+  <rect class="ag" x="146" y="40" width="150" height="96" rx="8"/><text x="221" y="64">Analyst agent</text>
+  <text class="s" x="221" y="84">run_gwas (R)</text><text class="s" x="221" y="99">check_rules</text><text class="s" x="221" y="114">rank_for_assay</text><text class="s" x="221" y="129">search_docs</text>
+  <rect class="cd" x="328" y="60" width="112" height="56" rx="8"/><text x="384" y="84">Code guards</text><text class="s" x="384" y="101">numbers, tools, IDs</text>
+  <rect class="ag" x="472" y="60" width="116" height="56" rx="8"/><text x="530" y="84">Reviewer agent</text><text class="s" x="530" y="101">verify_report</text>
+  <rect class="hu" x="620" y="60" width="112" height="56" rx="8"/><text x="676" y="84">Human</text><text class="s" x="676" y="101">approve / reject</text>
+  <rect class="cd" x="764" y="60" width="104" height="56" rx="8"/><text x="816" y="84">Assay</text><text class="s" x="816" y="101">code, simulated</text>
+  <rect class="cd" x="900" y="60" width="86" height="56" rx="8"/><text x="943" y="84">Truth</text><text class="s" x="943" y="101">check</text>
+  <path class="l" d="M114 88H144"/><path class="l" d="M296 88H326"/><path class="l" d="M440 88H470"/><path class="l" d="M588 88H618"/><path class="l" d="M732 88H762"/><path class="l" d="M868 88H898"/>
+  <path class="l" d="M816 118V160H221V138" stroke-dasharray="5 4"/>
+  <text class="s" x="520" y="176">next round: assay results go back to the Analyst (variants already assayed are skipped)</text>
+  <rect x="14" y="14" width="10" height="10" class="ag"/><text class="s" x="30" y="23" style="text-anchor:start">LLM agent</text>
+  <rect x="104" y="14" width="10" height="10" class="cd"/><text class="s" x="120" y="23" style="text-anchor:start">plain code</text>
+  <rect x="190" y="14" width="10" height="10" class="hu"/><text class="s" x="206" y="23" style="text-anchor:start">human</text>
+</svg>
