@@ -58,3 +58,47 @@ def test_example_questions_are_in_scope():
     from gwascrew.api import IN_SCOPE
     for q in client.get("/api/examples").json():
         assert IN_SCOPE.search(q["question"]), q
+
+
+def test_full_report_html_and_pdf(monkeypatch):
+    """The Full report tab: one self-contained page with every round's hash, and the same report as a PDF."""
+    import pytest
+    from gwascrew import report
+    sid = client.post("/api/sessions", json={"question": "Which variants are associated?", "reviewer": "tester"}).json()["session_id"]
+    assert client.get(f"/api/sessions/{sid}/report.html").status_code in (200, 409)   # 409 until a round has a report
+    s = wait_for(sid, {"awaiting_approval", "needs_review", "error"})
+    assert s["status"] == "awaiting_approval", s
+    assert client.post(f"/api/sessions/{sid}/decision", json={"approve": s["rounds"][0]["proposals"]}).status_code == 200
+    s = wait_for(sid, {"awaiting_approval", "finished", "needs_review", "error"})
+
+    r = client.get(f"/api/sessions/{sid}/report.html?download=1")
+    assert r.status_code == 200 and r.headers["content-disposition"].startswith("attachment")
+    page = r.text
+    assert "SIMULATED" in page and "Appendix B" in page and "<script" not in page
+    for rd in s["rounds"]:
+        assert rd["report_sha256"] in page
+    assert client.get(f"/api/sessions/{sid}/report.html").headers["content-disposition"].startswith("inline")
+    assert client.get("/api/sessions/nope/report.html").status_code == 404
+
+    if not report.pdf_available():
+        pytest.skip("pandoc / xelatex not installed")
+    pdf = client.get(f"/api/sessions/{sid}/report.pdf")
+    assert pdf.status_code == 200 and pdf.content[:5] == b"%PDF-"
+
+
+def test_report_text_never_becomes_markup():
+    """LLM text inside a round report is shown as text: no raw HTML in the page, no raw LaTeX in the PDF source."""
+    from gwascrew import report
+    html_out = report.md_block("x <script>alert(1)</script> <img src=x onerror=alert(1)>")
+    assert "<script" not in html_out and "<img" not in html_out
+    defused = report.defuse_raw("```{=latex}\n\\input{x}\n``` and `\\input{y}`{=latex}")
+    assert "```{=" not in defused and "`{=" not in defused     # pandoc then prints the block as text
+
+
+def test_how_it_works_guide_is_served():
+    page = client.get("/").text
+    assert 'data-p="guide"' in page and "/static/guide.html" in page
+    guide = client.get("/static/guide.html")
+    assert guide.status_code == 200 and "How the agents connect" in guide.text
+    pdf = client.get("/static/guide.pdf")
+    assert pdf.status_code == 200 and pdf.content[:4] == b"%PDF"

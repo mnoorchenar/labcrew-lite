@@ -329,6 +329,37 @@ svg .growy[data-b] { transform: scaleY(0); transform-box: fill-box; transform-or
 .stack .foot { margin-top: 10px; display: flex; gap: 10px; align-items: center; font-size: 13px; color: var(--ink2); }
 .stack .foot b { color: var(--ink); }
 
+/* hover tips + advanced mode */
+.tb[data-k] { cursor: help; }
+.tb[data-k]:hover { border-color: #a5b4fc; box-shadow: 0 0 0 2px rgba(79,70,229,.12); }
+#tip { position: absolute; z-index: 30; width: 340px; background: #0f172a; color: #e2e8f0; border-radius: 12px; padding: 11px 13px; pointer-events: none;
+       box-shadow: 0 18px 40px -12px rgba(15,23,42,.6); display: none; font-size: 12.5px; line-height: 1.45; }
+#tip.show { display: block; }
+#tip .th { font-weight: 800; font-size: 13px; color: #fff; margin-bottom: 4px; }
+#tip pre, .adv pre { margin: 8px 0 0 0; background: #020617; border: 1px solid #1e293b; border-radius: 8px; padding: 8px 10px; font: 500 11px/1.5 "JetBrains Mono", monospace;
+       color: #bfdbfe; white-space: pre-wrap; word-break: break-word; }
+.fchart { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 3px; margin-top: 8px; }
+.fchart span.fb { background: #1e293b; color: #e2e8f0; border: 1px solid #334155; border-radius: 7px; padding: 3px 7px; font-size: 11px; font-weight: 600; }
+.fchart span.fa { color: #64748b; font-size: 12px; }
+.adv .fchart span.fb { background: var(--accent-soft); color: #3730a3; border-color: var(--accent-line); }
+.adv .fchart span.fa { color: #cbd5e1; transition: color var(--t); }
+/* animated flowchart (Advanced): boxes light up in order, driven by the step clock */
+.adv .fchart span.fb { opacity: .38; transition: opacity var(--t), background var(--t), color var(--t), transform var(--t), box-shadow var(--t); }
+.adv .fchart span.fb.done { opacity: 1; }
+.adv .fchart span.fb.now { opacity: 1; background: var(--kind, var(--accent)); color: #fff; border-color: var(--kind, var(--accent)); transform: scale(1.06); box-shadow: 0 6px 14px -6px var(--kind, var(--accent)); }
+.adv .fchart span.fa.done { color: var(--accent); }
+.adv { flex: 1; min-height: 0; overflow-y: auto; margin-top: 8px; padding-right: 4px; font-size: 12.5px; line-height: 1.45; color: #1f2937; }
+.adv h4 { margin: 10px 0 2px 0; font-size: 10.5px; letter-spacing: .07em; text-transform: uppercase; color: var(--accent); font-weight: 750; }
+.adv h4:first-child { margin-top: 0; }
+.adv ul { margin: 2px 0 0 0; padding-left: 17px; }
+.adv li { margin: 2px 0; }
+.adv pre { background: #0f172a; color: #e2e8f0; font-size: 10.5px; }
+.adv details { border: 1px solid var(--line); border-radius: 9px; padding: 5px 9px; margin-top: 5px; background: #fafbff; }
+.adv summary { cursor: pointer; font-weight: 700; color: var(--ink); }
+.adv details p { margin: 4px 0 2px 0; color: var(--ink2); }
+.adv .file { font: 600 10.5px "JetBrains Mono", monospace; color: var(--muted); }
+.story.adv-on h2 { font-size: 19px; margin-bottom: 2px; }
+
 /* start overlay */
 .start { position: absolute; inset: 0; display: grid; place-items: center; background: rgba(255,255,255,.72); backdrop-filter: blur(2px); z-index: 5; border-radius: 18px; cursor: pointer; }
 .start div { text-align: center; }
@@ -367,6 +398,7 @@ svg .growy[data-b] { transform: scaleY(0); transform-box: fill-box; transform-or
       </div><div class="s" id="start-s" style="display:none"></div></div></div>
   </div>
   <div class="story" id="story"></div>
+  <div id="tip"></div>
   <div class="stack" id="stackov">
     <button class="btn x" id="b-stack-x" title="Close (Esc)">✕</button>
     <h3>Technology stack</h3>
@@ -383,13 +415,15 @@ svg .growy[data-b] { transform: scaleY(0); transform-box: fill-box; transform-or
     
     <div class="seg" id="speed"></div>
     <span class="tog on" id="auto"><span class="sw"></span>Auto</span>
+    <span class="tog" id="advtog" title="Advanced: more detail, code and harder questions for each step (A)"><span class="sw"></span>Advanced</span>
     <span class="tog" id="techtog" title="Show the technology used in each step (T)"><span class="sw"></span>Tech</span>
     <button class="btn" id="b-stack" title="Technology stack overview (S)">Stack</button>
     <button class="btn" id="b-full" title="Present full screen (F)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>Present</button>
   </div>
-  <div class="keys">Space play/pause · ← → steps · 1–6 speed · T tech · S stack · F full screen</div>
+  <div class="keys">Space play/pause · ← → steps · 1–6 speed · T tech · A advanced · S stack · F full screen</div>
 </div></div>
 
+<script src="tour-details.js"></script>
 <script>
 (function () {
 "use strict";
@@ -724,7 +758,7 @@ const TECH = {
   },
 };
 const STACK = [
-  { n: "User interface", d: "what people click", ai: false, t: ["HTML page served by FastAPI", "Plotly", "Mermaid", "marked + DOMPurify"] },
+  { n: "User interface", d: "what people click", ai: false, t: ["HTML page served by FastAPI", "Plotly", "Mermaid", "HTML / PDF report (pandoc)"] },
   { n: "Orchestration", d: "fixed steps + human gate", ai: true, t: ["CrewAI Flow", "@human_feedback", "CrewAI Agents · Analyst, Reviewer", "CrewAI tools + guardrails"] },
   { n: "API", d: "one session per question", ai: false, t: ["FastAPI", "Pydantic", "worker thread per session"] },
   { n: "Model access", d: "words + tool choice, cached", ai: true, t: ["LiteLLM", "Groq · gpt-oss-120b", "temperature 0", "offline mock"] },
@@ -737,8 +771,9 @@ const STACK = [
 
 // indigo = calls a language model. CrewAI Flow (step order, gates, router) is deterministic code: grey.
 const isAI = t => /CrewAI LLM|CrewAI Agent|LiteLLM|Groq|temperature|offline mock/.test(t) && !/pytest/.test(t);
-const badge = t => `<span class="tb${isAI(t) ? " ai" : ""}">${t}</span>`;
-let showTech = false;
+const esc = t => t.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
+const badge = t => `<span class="tb${isAI(t) ? " ai" : ""}"${window.TOUR_TIPS && window.TOUR_TIPS(t) ? ` data-k="${esc(t)}"` : ""}>${t}</span>`;
+let showTech = false, showAdv = false;
 
 // ------------------------------------------------------------------ engine
 const $ = s => document.querySelector(s);
@@ -765,16 +800,30 @@ function renderMap() {
   [...map.querySelectorAll(".node")].forEach((d, i) => { d.classList.toggle("done", i < idx); d.classList.toggle("now", i === idx); });
   $("#railfill").style.width = (100 * idx / (STEPS.length - 1)) + "%";
 }
+const flowHtml = a => `<div class="fchart">${a.map(x => `<span class="fb">${x}</span>`).join('<span class="fa">→</span>')}</div>`;
+const techRow = s => `<div class="tech"><div class="tl2">Built with</div><div class="row">${((TECH[scenario] || {})[s.node] || []).map(badge).join("")}</div></div>`;
+function advHtml(s) {
+  const a = (window.TOUR_ADV || {})[s.node];
+  if (!a) return `<div class="adv"><p>No extra detail for this step.</p></div>`;
+  return `<div class="adv">
+    <div class="file">${a.file}</div>
+    <h4>How it flows</h4>${flowHtml(a.flow)}
+    <h4>Code (simplified)</h4><pre>${a.code.replace(/&/g, "&amp;").replace(/</g, "&lt;")}</pre>
+    <h4>More detail</h4><ul>${a.more.map(m => `<li>${m}</li>`).join("")}</ul>
+    <h4>If someone asks a harder question</h4>${a.qa.map(([q, an]) => `<details><summary>${q}</summary><p>${an}</p></details>`).join("")}
+  </div>`;
+}
 function renderStory() {
+  advKey = "";
   const s = STEPS[idx];
-  story.className = `story k-${s.kind}${showTech ? " tech-on" : ""}`;
-  story.innerHTML = `<div class="fadein" style="display:flex;flex-direction:column;height:100%">
+  story.className = `story k-${s.kind}${showTech ? " tech-on" : ""}${showAdv ? " adv-on" : ""}`;
+  story.innerHTML = `<div class="fadein" style="display:flex;flex-direction:column;height:100%;min-height:0">
     <span class="actor">${ic(s.icon)}${s.actor}</span>
-    <div class="stepno">Step ${idx + 1} of ${STEPS.length} · ${KIND_LABEL[s.kind]}</div>
-    <h2>${s.title}</h2><div class="what">${s.what}</div>
-    <div class="why"><div class="h">${ic("bulb")}Why it matters</div><p>${s.why}</p></div>
-    ${showTech ? `<div class="tech"><div class="tl2">Built with</div><div class="row">${((TECH[scenario] || {})[s.node] || []).map(badge).join("")}</div></div>`
-               : `<div class="hood">${s.hood}</div>`}</div>`;
+    <div class="stepno">Step ${idx + 1} of ${STEPS.length} · ${KIND_LABEL[s.kind]}${showAdv ? " · advanced" : ""}</div>
+    <h2>${s.title}</h2>
+    ${showAdv ? advHtml(s) : `<div class="what">${s.what}</div>
+    <div class="why"><div class="h">${ic("bulb")}Why it matters</div><p>${s.why}</p></div>`}
+    ${showTech ? techRow(s) : (showAdv ? "" : `<div class="hood">${s.hood}</div>`)}</div>`;
 }
 function load(i) {
   idx = Math.max(0, Math.min(STEPS.length - 1, i)); t = 0; fired = -1; endHold = 0;
@@ -796,10 +845,22 @@ function typewriters() {
                       .replace(/⟦([A-Z]\d+)⟧/g, '<span class="ph">[$1]</span>');
   });
 }
+// Advanced flowchart: the same step clock lights the boxes one by one (so pause, speed and step changes all apply).
+let advKey = "";
+function advFlow() {
+  if (!showAdv) return;
+  const boxes = story.querySelectorAll(".adv .fchart .fb"), arrows = story.querySelectorAll(".adv .fchart .fa");
+  const n = boxes.length; if (!n) return;
+  const s = STEPS[idx], f = Math.min(1, t / s.dur);
+  const cur = f >= 1 ? n : Math.min(n - 1, Math.floor(f * n / 0.9));   // last box is reached at 90 % of the step, then all stay lit
+  const key = idx + ":" + cur + ":" + n; if (key === advKey) return; advKey = key;
+  boxes.forEach((b, i) => { b.classList.toggle("done", i < cur); b.classList.toggle("now", i === cur); });
+  arrows.forEach((a, i) => a.classList.toggle("done", i < cur));
+}
 function update() {
   const s = STEPS[idx];
   while (fired + 1 < s.beats.length && t >= s.beats[fired + 1]) fire(++fired);
-  typewriters();
+  typewriters(); advFlow();
   const f = Math.min(1, t / s.dur);
   $("#pbar").style.width = (f * 100) + "%";
   $("#pstep").textContent = `Step ${idx + 1} of ${STEPS.length} · ${s.node}`;
@@ -835,6 +896,22 @@ function setScenario(name, keepPlaying) {
   const rail = $(".map .rail"); rail.style.left = rail.style.right = (STEPS.length < 8 ? 150 : 70) + "px";
   buildMap(); load(0); setPlaying(!!keepPlaying);
 }
+function setAdv(on) { showAdv = on; $("#advtog").classList.toggle("on", on); advKey = ""; renderStory(); update(); }
+// hover tips: any .tb[data-k] badge (story panel or stack overlay)
+const tip = $("#tip");
+document.addEventListener("mouseover", e => {
+  const b = e.target.closest && e.target.closest(".tb[data-k]");
+  if (!b) { tip.classList.remove("show"); return; }
+  const k = b.dataset.k, d = window.TOUR_TIPS(k); if (!d) return;
+  const x = d.flow ? `<div class="fchart">${d.flow.split(" → ").map(p => `<span class="fb">${p}</span>`).join('<span class="fa">→</span>')}</div>` : "";
+  const c = d.code ? `<pre>${d.code.replace(/&/g, "&amp;").replace(/</g, "&lt;")}</pre>` : "";
+  tip.innerHTML = `<div class="th">${k}</div>${d.simple}${x}${c}`;
+  tip.classList.add("show");
+  const st = $("#stage").getBoundingClientRect(), r = b.getBoundingClientRect(), sc = st.width / 1280;
+  const th = tip.offsetHeight, bx = (r.left - st.left) / sc, by = (r.top - st.top) / sc, bh = r.height / sc;
+  let top = by - th - 8; if (top < 4) top = by + bh + 8;
+  tip.style.left = Math.max(6, Math.min(1280 - 346, bx)) + "px"; tip.style.top = Math.max(4, Math.min(716 - th, top)) + "px";
+});
 function setTech(on) { showTech = on; $("#techtog").classList.toggle("on", on); renderStory(); }
 function openStack(open) {
   $("#stackov").classList.toggle("open", open);
@@ -851,6 +928,7 @@ SPEEDS.forEach(v => { const b = document.createElement("button"); b.textContent 
 [...$("#scen").children].forEach(b => b.onclick = () => setScenario(b.dataset.s, playing));
 $("#layers").innerHTML = STACK.map(l => `<div class="layer${l.ai ? " ai" : ""}"><div class="ln">${l.n}<small>${l.d}</small></div><div class="row">${l.t.map(badge).join("")}</div></div>`).join("");
 $("#techtog").onclick = () => setTech(!showTech);
+$("#advtog").onclick = () => setAdv(!showAdv);
 $("#b-stack").onclick = () => openStack(!$("#stackov").classList.contains("open"));
 $("#b-stack-x").onclick = () => openStack(false);
 $("#b-play").onclick = togglePlay;
@@ -869,6 +947,7 @@ document.addEventListener("keydown", e => {
   else if (e.key === "Home") { hideStart(); load(0); }
   else if (e.key === "f" || e.key === "F") $("#b-full").click();
   else if (e.key === "t" || e.key === "T") setTech(!showTech);
+  else if (e.key === "a" || e.key === "A") setAdv(!showAdv);
   else if (e.key === "s" || e.key === "S") openStack(!$("#stackov").classList.contains("open"));
   else if (e.key === "Escape") openStack(false);
   else if (/^[1-6]$/.test(e.key)) setSpeed(SPEEDS[+e.key - 1]);
@@ -886,12 +965,13 @@ const q = new URLSearchParams(location.search);
 setSpeed(SPEEDS.includes(+q.get("speed")) ? +q.get("speed") : 1);
 setScenario(q.get("scenario") || "gwas", false);
 if (q.get("tech") === "1") setTech(true);
+if (q.get("adv") === "1") setAdv(true);
 load((+q.get("step") || 1) - 1);
 if (q.get("step") || q.get("play") === "1") hideStart();
 setPlaying(q.get("play") === "1");
 requestAnimationFrame(frame);
 const seek = ms => { t = ms; update(); };
-window.lcTour = { load, setSpeed, setPlaying, seek, setScenario, setTech, openStack, get state() { return { idx, t, playing, speed }; } };  // used by the screenshot test
+window.lcTour = { load, setSpeed, setPlaying, seek, setScenario, setTech, setAdv, openStack, get state() { return { idx, t, playing, speed }; } };  // used by the screenshot test
 })();
 </script>
 </body>

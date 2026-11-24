@@ -102,15 +102,17 @@ class CachedLLM(BaseLLM):
             if (wait := quota_wait_left(model)) > 0:
                 quota_msgs.append(f"{model}: daily quota used up, frees up in about {wait:.0f}s")
                 continue
-            quota_msg = None
+            quota_msg, source = None, "llm"
             llm = LLM(model=model, temperature=0, max_completion_tokens=MAX_COMPLETION_TOKENS,
                       **({"reasoning_effort": e} if (e := reasoning_effort(model)) else {}))
             try:
                 raw = llm.call(msgs, tools=tools, available_functions=None, from_task=from_task, from_agent=from_agent)
-            except Exception as exc:  # noqa: BLE001 - only the daily-quota case is handled here
+            except Exception as exc:  # noqa: BLE001 - daily quota and misnamed tool calls are handled here
                 quota_msg = daily_quota_message(exc)
                 if quota_msg is None:
-                    raise   # per-minute throttles etc.: CrewAI's short retries still apply
+                    if (bad := failed_tool_call(exc)) is None:
+                        raise   # per-minute throttles etc.: CrewAI's short retries still apply
+                    raw, source = self._recover_tool_call(llm, bad, msgs, tools, names, from_task, from_agent)
             if quota_msg is not None:   # this model is out for today: remember it and try the next one
                 mark_quota_exhausted(model, quota_msg)
                 quota_msgs.append(f"{model}: {quota_msg}")
@@ -119,13 +121,25 @@ class CachedLLM(BaseLLM):
             cache = cache_file(model)
             cache.parent.mkdir(parents=True, exist_ok=True)
             cache.write_text(json.dumps({"answer": answer}), encoding="utf-8")
-            self._log(role, model, "llm", answer, msgs, llm.get_token_usage_summary())
+            self._log(role, model, source, answer, msgs, llm.get_token_usage_summary())
             return answer
         # Raised outside any except block on purpose: CrewAI's retry classifier walks __context__ and would find
         # the original RateLimitError, then sleep on Groq's Retry-After instead of failing.
         raise LLMQuotaExhausted("every model in the chain has used up its daily token quota. "
                                 + " | ".join(quota_msgs)
                                 + ". Try again later, or start the app with 'run.bat mock' for the offline agent.")
+
+    @staticmethod
+    def _recover_tool_call(llm, bad: dict, msgs, tools, names, from_task, from_agent):
+        """Groq refused a tool call because the name is not one of our tools (gpt-oss sometimes emits its
+        channel name, e.g. 'commentary', or 'json'). If the arguments fit exactly one real tool, it is that
+        call; otherwise ask once more, saying which tools exist. The answer still goes through every code guard."""
+        if (fixed := repair_tool_call(bad, tools)) is not None:
+            return fixed, "llm-repaired"
+        nudge = {"role": "user", "content": f"There is no tool named {bad.get('name')!r}. "
+                                            f"Call one of these tools by its exact name: {', '.join(names)}."}
+        return llm.call(msgs + [nudge], tools=tools, available_functions=None, from_task=from_task,
+                        from_agent=from_agent), "llm-retried"
 
     @staticmethod
     def _log(role, model, source, answer, msgs, usage) -> None:
@@ -211,6 +225,32 @@ def as_plain(raw: Any) -> str | list[dict]:
     return str(raw)
 
 
+def failed_tool_call(exc: BaseException) -> dict | None:
+    """Groq's 'tool_use_failed' error -> the call the model tried ({"name", "arguments"}), else None."""
+    text = str(exc)
+    if "tool_use_failed" not in text or (start := text.find("{")) < 0:
+        return None
+    try:
+        body, _ = json.JSONDecoder().raw_decode(text[start:])
+        gen = json.loads(body["error"]["failed_generation"])
+    except (ValueError, KeyError, TypeError):
+        return None
+    if not isinstance(gen, dict) or not isinstance(gen.get("arguments"), dict):
+        return None
+    return {"name": gen.get("name"), "arguments": gen["arguments"]}
+
+
+def repair_tool_call(bad: dict, tools: list[dict] | None) -> list[dict] | None:
+    """A call under an unknown tool name whose arguments fit exactly one real tool (all its required
+    parameters present, nothing it does not take) -> that tool call. Anything ambiguous -> None."""
+    by_name = {t["function"]["name"]: t["function"].get("parameters", {}) for t in tools or [] if "function" in t}
+    if bad["name"] in by_name:     # a real tool with bad arguments is not a naming slip: do not guess
+        return None
+    keys = set(bad["arguments"])
+    fits = [n for n, p in by_name.items() if keys and set(p.get("required", [])) <= keys <= set(p.get("properties", {}))]
+    return tool_call(fits[0], bad["arguments"]) if len(fits) == 1 else None
+
+
 def tool_call(name: str, args: dict | None = None) -> list[dict]:
     return [{"id": f"call_{name}", "type": "function", "function": {"name": name, "arguments": json.dumps(args or {})}}]
 
@@ -261,7 +301,7 @@ def report_problems(rep: AnalystReport, s: Session) -> list[str]:
     if bad := [c for c in CITATION.findall(rep.summary) if c not in retrieved]:
         errs.append(f"citations not returned by search_docs: {bad}")
     for sent in sentences(rep.summary):  # every sentence must point to its evidence: a tool or a document
-        has_tool_fact = (evidence.NUMBER.findall(evidence.ID_TOKEN.sub("", sent)) or TOOL_NAME.search(sent)
+        has_tool_fact = (evidence.number_tokens(sent) or TOOL_NAME.search(sent)
                          or re.search(r"\bvar\d{4}\b", sent))
         if not has_tool_fact and not CITATION.search(sent):
             errs.append(f"this sentence names no tool result and cites no document; add the tool name, e.g. "

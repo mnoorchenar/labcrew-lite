@@ -113,14 +113,24 @@ def sha256(text: str) -> str:
 
 
 # ------------------------------------------------------------------ number check
-# A "number" is a standalone numeric token, not part of an ID such as var0420, SOP-GEN-003 or v2.0.
-NUMBER = re.compile(r"(?<![\w.\-])-?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?%?(?![\w\-]|\.\d)")
-# An ID mixes letters and digits; scientific notation like 1e-20 also does, so it is excluded explicitly.
-ID_TOKEN = re.compile(r"\b(?!\d+(?:\.\d+)?[eE][-+]?\d+\b)(?=[\w.\-]*[A-Za-z])(?=[\w.\-]*\d)[\w.\-]*\w")
+# IDs such as var0420, SOP-GEN-003-v1.0 or v2.0 start with a letter and contain a digit; they are removed first.
+# Anything that starts with a digit (2.728e-05, 7.77-fold, 7.77x) is never an ID, so it is always checked.
+# ASCII letters only: "λ0.9" is a Greek symbol followed by a number, not an ID.
+ID_TOKEN = re.compile(r"(?<![A-Za-z0-9_.\-])(?=[A-Za-z_.\-]*\d)[A-Za-z][A-Za-z0-9_.\-]*[A-Za-z0-9_]")
+# Versions (4.6.2) stay whole; otherwise integers, decimals (also .777), scientific notation. A minus sign counts
+# only when it does not follow a number or word, so the range 7.77-8.88 is two positive numbers.
+NUMBER = re.compile(r"(?:(?<![A-Za-z0-9_.])-)?(?<![A-Za-z0-9_.])"
+                    r"(?:\d+(?:\.\d+){2,}|(?:\d+(?:\.\d+)?|\.\d+)(?:[eE][-+]?\d+)?%?)")
+
+
+def number_tokens(text: str) -> list[str]:
+    return NUMBER.findall(ID_TOKEN.sub(" ", text))
 
 
 def canon(token: str) -> str:
     """One canonical form per number, so 0.0250, 2.5e-2 and 0.025 all compare equal."""
+    if token.count(".") > 1:   # a version such as 4.6.2: compared as text
+        return token
     x = float(token.rstrip("%"))
     return str(int(x)) if x.is_integer() else repr(x)
 
@@ -132,7 +142,7 @@ def numbers_in(obj: Any, out: set[str] | None = None) -> set[str]:
     if isinstance(obj, (int, float)):
         out.add(canon(repr(float(obj))))
     elif isinstance(obj, str):
-        out.update(canon(n) for n in NUMBER.findall(ID_TOKEN.sub("", obj)))
+        out.update(canon(n) for n in number_tokens(obj))
     elif isinstance(obj, dict):
         for v in obj.values():
             numbers_in(v, out)
@@ -153,6 +163,6 @@ def check_numbers(text: str, session_id: str) -> dict:
     for rec in tool_calls(session_id):
         if rec["status"] == "ok" and rec["tool"] in EVIDENCE_TOOLS:
             numbers_in(rec["output"], known)
-    found = NUMBER.findall(ID_TOKEN.sub("", text))
+    found = number_tokens(text)
     unmatched = sorted({n for n in found if canon(n) not in known})
     return {"ok": not unmatched, "checked": len(found), "unmatched": unmatched}

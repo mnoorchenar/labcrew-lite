@@ -7,6 +7,7 @@ Python simulated. R's own version and coloc's version come back with every resul
 """
 from __future__ import annotations
 
+import csv
 import glob
 import json
 import os
@@ -15,7 +16,6 @@ import subprocess
 from pathlib import Path
 
 import numpy as np
-import pandas as pd
 
 from gwascrew.rules import RuleSet
 from gwascrew.stats import GwasResult
@@ -37,8 +37,10 @@ def write_data(data: dict, folder: Path) -> dict:
     folder.mkdir(parents=True, exist_ok=True)
     G = np.asarray(data["G"], dtype="float64")
     G.T.tofile(folder / "genotypes.bin")   # transposed bytes = column-major order, which R's matrix() expects
-    pd.DataFrame({"age": data["age"], "sex": data["sex"], "trait": data["trait"]}).to_csv(
-        folder / "covariates.csv", index=False)
+    with open(folder / "covariates.csv", "w", newline="", encoding="utf-8") as f:
+        w = csv.writer(f, lineterminator="\n")
+        w.writerow(["age", "sex", "trait"])
+        w.writerows(zip(data["age"], data["sex"], data["trait"]))
     return {"genotypes_bin": str(folder / "genotypes.bin"), "covariates_csv": str(folder / "covariates.csv"),
             "n": int(G.shape[0]), "m": int(G.shape[1]), "variant_ids": [str(v) for v in data["variant_ids"]]}
 

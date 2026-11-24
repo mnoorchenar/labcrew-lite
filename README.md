@@ -40,7 +40,7 @@ All data are simulated and fictional.
 | **Human gate** | A Flow step blocks until a person approves or rejects variants. The agents have no tool that runs the assay. |
 | **Documents with citations** | SOPs, guidelines, past studies and annotation notes are searched (BM25 + embeddings). The newest approved SOP version is chosen by code, conflicts are shown, and a document with an injected instruction is quarantined. |
 | **Audit trail** | Every tool call and every human decision is logged with the rules version and the hash of the exact report the reviewer saw. |
-| **Review page** | One page served by FastAPI: progress stepper, result tiles, Manhattan and QQ plots, evidence, full report, audit tables. |
+| **Review page** | One page served by FastAPI: progress stepper, result tiles, Manhattan and QQ plots, evidence, full report (download as PDF, HTML or the hash-checked Markdown), audit tables. |
 
 ## How it works
 
@@ -96,6 +96,7 @@ The scripts use `.venv` in this folder, or fall back to `..\labcrew\.venv`.
 | Python statistics kept as a second implementation | Double programming: the tests require R and Python to agree exactly. |
 | Decision taken by code from `rules.yaml` | Pass or fail must not depend on how the model words things. The file's version and hash are stamped on every decision. |
 | `submit_report` and `submit_review` as tools | Groq `gpt-oss-120b` answers reliably through native tool calls. Plain JSON answers made it invent a tool called "json". |
+| Misnamed tool calls repaired by code | gpt-oss sometimes sends a finished report under its channel name (`commentary`), which Groq rejects. If the arguments fit exactly one real tool, the call is treated as that tool; otherwise the model is asked once more with the real tool names. The answer still passes every guard. |
 | Number check ignores `verify_report` output | Otherwise checking a wrong number once would whitelist it for the second check. |
 | Tool log is stamped with a session id | An append-only log would let yesterday's numbers pass today's check. |
 | Shortlist = Bonferroni hit or PIP >= 0.1, at most 5 | Do not spend assay budget on weak candidates. The rule is in `rules.yaml` and one function (`shortlist`). |
@@ -144,6 +145,8 @@ Rules and thresholds are in `gwascrew/rules.yaml`. Bump its `version` on every c
 | POST | `/api/sessions/{id}/decision` | Human approve or reject; unblocks the Flow |
 | GET | `/api/sessions/{id}/audit` | Human decisions |
 | GET | `/api/sessions/{id}/tools` | Every tool call |
+| GET | `/api/sessions/{id}/report.html` | Full report as one self-contained page (`?download=1` saves it) |
+| GET | `/api/sessions/{id}/report.pdf` | The same report as a PDF (needs pandoc and XeLaTeX on the server) |
 | GET | `/api/examples` | The labelled example questions |
 </details>
 
@@ -164,7 +167,7 @@ gwascrew/   api.py (FastAPI)  flow.py (CrewAI Flow)  crew.py (agents, guardrails
 stats/      gwas.R (the statistics engine)
 docs/       fictional SOPs, guidelines, studies, annotation notes (the search corpus)
 eval/       questions.yaml, run_eval.py, results/
-static/     index.html (review page), tour.html (guided tour)
+static/     index.html (review page), tour.html (guided tour), guide.html + guide.pdf (how it works)
 figures/    README figures
 tests/      offline tests
 ```

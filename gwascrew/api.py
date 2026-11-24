@@ -6,6 +6,8 @@ and serves the review page (static/index.html).
     GET  /api/sessions/{id}/plot       Manhattan + QQ data (computed by the R engine)
     POST /api/sessions/{id}/decision   the human's approve / reject: unblocks the waiting Flow
     GET  /api/sessions/{id}/audit      human decisions        GET /api/sessions/{id}/tools   every tool call
+    GET  /api/sessions/{id}/report.html  the full report as one self-contained page (?download=1 to save it)
+    GET  /api/sessions/{id}/report.pdf   the same report as a PDF (pandoc + XeLaTeX on the server)
 
 How the human step works: the Flow's @human_feedback step asks a QueueProvider for an answer, and that call
 blocks on a queue until POST /decision puts the reviewer's reply on it. No polling inside the Flow.
@@ -22,11 +24,11 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, HTMLResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, field_validator
 
-from gwascrew import evidence
+from gwascrew import evidence, report
 from gwascrew.crew import load_env, model_chain
 from gwascrew.flow import SESSIONS, GwasFlow
 
@@ -109,7 +111,8 @@ def health():
     load_env()
     mock = os.environ.get("MOCK_LLM") == "1"
     return {"ok": True, "data": "SIMULATED / FICTIONAL",
-            "llm": {"mode": "mock" if mock else "live", "models": [] if mock else model_chain()}}
+            "llm": {"mode": "mock" if mock else "live", "models": [] if mock else model_chain()},
+            "pdf": report.pdf_available()}
 
 
 @app.post("/api/sessions")
@@ -187,3 +190,35 @@ def tools(session_id: str):
     _run(session_id)
     return [{k: r[k] for k in ("timestamp", "tool", "tool_version", "inputs", "status")}
             for r in evidence.tool_calls(session_id)]
+
+
+def _report_parts(session_id: str) -> dict:
+    run = _run(session_id)
+    st = run["flow"].state
+    if not any(r.get("report_md") for r in st.rounds):
+        raise HTTPException(409, "no round has produced a report yet")
+    return report.build_parts(st, SESSIONS.get(session_id), evidence.audit_log(session_id),
+                              evidence.tool_calls(session_id), status="error" if run["error"] else st.status)
+
+
+def _attachment(name: str, download: bool) -> dict:
+    return {"Content-Disposition": f'{"attachment" if download else "inline"}; filename="{name}"'}
+
+
+@app.get("/api/sessions/{session_id}/report.html")
+def report_html(session_id: str, download: bool = False):
+    page = report.render_html(_report_parts(session_id))
+    return HTMLResponse(page, headers=_attachment(f"labcrew_lite_report_{session_id}.html", download))
+
+
+@app.get("/api/sessions/{session_id}/report.pdf")
+def report_pdf(session_id: str, download: bool = True):
+    parts = _report_parts(session_id)
+    if not report.pdf_available():
+        raise HTTPException(503, "PDF export needs pandoc and xelatex (LaTeX) on the server")
+    try:
+        pdf = report.render_pdf(parts)
+    except Exception as exc:  # noqa: BLE001 - shown to the user
+        raise HTTPException(500, f"PDF build failed: {exc}") from exc
+    return Response(pdf, media_type="application/pdf",
+                    headers=_attachment(f"labcrew_lite_report_{session_id}.pdf", download))
